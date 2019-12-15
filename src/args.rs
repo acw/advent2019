@@ -1,10 +1,15 @@
 use clap::{App,Arg,SubCommand};
 use crate::machine::Computer;
+use crate::wiremap::{Wire};
 use std::fs;
+use std::iter::FromIterator;
+use std::str;
+use std::str::FromStr;
 
 pub enum Command {
     ComputeFuel(Vec<u64>),
     RunComputer(Computer),
+    WireMap(Vec<Wire>),
 }
 
 fn is_number(s: String) -> Result<(), String> {
@@ -49,6 +54,14 @@ impl Command {
                                                  .required(true)
                                                  .validator(is_file))
                                         )
+                           .subcommand(SubCommand::with_name("wiremap")
+                                        .about("compute the given wire map")
+                                        .arg(Arg::with_name("MAP")
+                                                 .index(1)
+                                                 .help("The wiremap to run.")
+                                                 .required(true)
+                                                 .validator(is_file))
+                                        )
                           .get_matches();
     
         if let Some(problem1) = matches.subcommand_matches("fuel") {
@@ -65,8 +78,24 @@ impl Command {
         if let Some(problem2) = matches.subcommand_matches("compute") {
             let start_pos_str = problem2.value_of("START_POSITION").unwrap();
             let start_pos = usize::from_str_radix(&start_pos_str, 10).unwrap();
-            let mut computer = Computer::load(problem2.value_of("COMPUTER").unwrap(), start_pos);
+            let computer = Computer::load(problem2.value_of("COMPUTER").unwrap(), start_pos);
             return Command::RunComputer(computer);
+        }
+
+        if let Some(problem3) = matches.subcommand_matches("wiremap") {
+            let file_contents = fs::read(problem3.value_of("MAP").unwrap()).unwrap();
+            let str_contents = str::from_utf8(&file_contents).unwrap();
+            let mut contents_iter = str_contents.chars().peekable();
+            let mut resvec = Vec::new();
+
+            while contents_iter.peek().is_some() {
+                let nextline = contents_iter.by_ref().take_while(|x| *x != '\n');
+                let nextstr = String::from_iter(nextline);
+                let next = Wire::from_str(&nextstr).unwrap();
+                resvec.push(next);
+            }
+
+            return Command::WireMap(resvec);
         }
     
         panic!("Failed to run a reasonable command.");
