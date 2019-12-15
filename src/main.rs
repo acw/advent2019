@@ -6,6 +6,7 @@ mod wiremap;
 use crate::args::Command;
 use crate::fuel::calculate_fuel;
 use crate::wiremap::WireMap;
+use std::cmp::{max,min};
 
 fn main() {
     match Command::get() {
@@ -69,6 +70,42 @@ fn main() {
             }
 
             println!("Total steps taken: {}", best_total_steps);
+        }
+
+        Command::PasswordCrack(start, end) => {
+            let mut count = 0;
+            let     first = max(start, 100000);
+            let     last  = min(end,   999999);
+
+            for cur in first..last {
+                let d0 = cur % 10;
+                let d1 = (cur / 10) % 10;
+                let d2 = (cur / 100) % 10;
+                let d3 = (cur / 1000) % 10;
+                let d4 = (cur / 10000) % 10;
+                let d5 = (cur / 100000) % 10;
+
+                if d5 > d4 { continue; }
+                if d4 > d3 { continue; }
+                if d3 > d2 { continue; }
+                if d2 > d1 { continue; }
+                if d1 > d0 { continue; }
+
+                let mut got_double = false;
+                if d0 == d1 { got_double |= !(               d1 == d2 ); }
+                if d1 == d2 { got_double |= !((d0 == d1) || (d2 == d3)); }
+                if d2 == d3 { got_double |= !((d1 == d2) || (d3 == d4)); }
+                if d3 == d4 { got_double |= !((d2 == d3) || (d4 == d5)); }
+                if d4 == d5 { got_double |= !( d3 == d4               ); }
+
+                if got_double {
+                    count += 1;
+                    println!("{} is a possibility [total {}]", cur, count);
+                }
+            }
+
+            // 353 is wrong (low)
+            println!("Successful digits: {}", count);
         }
     }
  }

@@ -10,6 +10,7 @@ pub enum Command {
     ComputeFuel(Vec<u64>),
     RunComputer(Computer),
     WireMap(Vec<Wire>),
+    PasswordCrack(u32, u32),
 }
 
 fn is_number(s: String) -> Result<(), String> {
@@ -62,6 +63,19 @@ impl Command {
                                                  .required(true)
                                                  .validator(is_file))
                                         )
+                           .subcommand(SubCommand::with_name("crack")
+                                        .about("crack a code in the given range")
+                                        .arg(Arg::with_name("START")
+                                                 .index(1)
+                                                 .help("The starting number.")
+                                                 .required(true)
+                                                 .validator(is_number))
+                                        .arg(Arg::with_name("END")
+                                                 .index(2)
+                                                 .help("The ending number")
+                                                 .required(true)
+                                                 .validator(is_number))
+                                        )
                           .get_matches();
     
         if let Some(problem1) = matches.subcommand_matches("fuel") {
@@ -96,6 +110,15 @@ impl Command {
             }
 
             return Command::WireMap(resvec);
+        }
+
+        if let Some(problem4) = matches.subcommand_matches("crack") {
+            let start_str = problem4.value_of("START").unwrap();
+            let end_str = problem4.value_of("END").unwrap();
+            let start = u32::from_str_radix(&start_str, 10).unwrap();
+            let end = u32::from_str_radix(&end_str, 10).unwrap();
+
+            return Command::PasswordCrack(start, end);
         }
     
         panic!("Failed to run a reasonable command.");
