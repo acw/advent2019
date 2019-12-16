@@ -7,6 +7,7 @@ use crate::args::Command;
 use crate::fuel::calculate_fuel;
 use crate::wiremap::WireMap;
 use std::cmp::{max,min};
+use std::sync::mpsc::channel;
 
 fn main() {
     match Command::get() {
@@ -22,23 +23,17 @@ fn main() {
             println!("TOTAL FUEL: {}", total);
         }
 
-        Command::RunComputer(initial) => {
+        Command::RunComputer(mut initial) => {
+            let (my_sender,    their_receiver) = channel();
+            let (their_sender, my_receiver)    = channel();
             println!("Initial Computer:");
             initial.show();
-            println!("Searching ...");
-            for noun in 0..99 {
-                for verb in 0..99 {
-                    let mut proposed = initial.clone();
-                    proposed.write(1, noun);
-                    proposed.write(2, verb);
-                    proposed.run();
-                    if proposed.read(0) == 19690720 {
-                        println!("Noun: {}", noun);
-                        println!("Verb: {}", verb);
-                        println!("ANSWER: {}", 100 * noun + verb);
-                        break;
-                    }
-                }
+            println!("Running, with input 1.");
+            my_sender.send(1).expect("Initial send failed");
+            initial.run(&their_receiver, &their_sender);
+            let result = my_receiver.recv().expect("Didn't get initial result");
+            for val in my_receiver.iter() {
+                println!("Received value: {}", val);
             }
         }
 
