@@ -31,7 +31,6 @@ fn main() {
             println!("Running, with input 1.");
             my_sender.send(1).expect("Initial send failed");
             initial.run(&their_receiver, &their_sender);
-            let result = my_receiver.recv().expect("Didn't get initial result");
             for val in my_receiver.iter() {
                 println!("Received value: {}", val);
             }
