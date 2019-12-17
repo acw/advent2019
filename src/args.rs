@@ -13,6 +13,7 @@ pub enum Command {
     WireMap(Vec<Wire>),
     Orbits(UniversalOrbitMap),
     PasswordCrack(u32, u32),
+    Amplify(Computer),
 }
 
 fn is_number(s: String) -> Result<(), String> {
@@ -86,7 +87,15 @@ impl Command {
                                                  .required(true)
                                                  .validator(is_number))
                                         )
-                          .get_matches();
+                           .subcommand(SubCommand::with_name("amplify")
+                                        .about("run the given amplifer computer")
+                                        .arg(Arg::with_name("COMPUTER")
+                                                 .index(1)
+                                                 .help("The computer to run.")
+                                                 .required(true)
+                                                 .validator(is_file))
+                                        )
+                           .get_matches();
 
         if let Some(problem1) = matches.subcommand_matches("fuel") {
             match problem1.values_of("NUM") {
@@ -138,6 +147,11 @@ impl Command {
             return Command::Orbits(res);
         }
 
+        if let Some(problem6) = matches.subcommand_matches("amplify") {
+            let computer = Computer::load(problem6.value_of("COMPUTER").unwrap(), 0);
+            return Command::Amplify(computer);
+        }
+ 
         panic!("Failed to run a reasonable command.");
     }
 }

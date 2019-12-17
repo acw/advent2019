@@ -127,5 +127,12 @@ fn main() {
                 }
             }
         }
+
+        Command::Amplify(computer) => {
+            let (amount_a, settings_a) = computer.find_best_signal(0..5, |x| computer.serialize(x));
+            println!("Best signal without loopback is {} @ {:?}", amount_a, settings_a);
+            let (amount_b, settings_b) = computer.find_best_signal(5..10, |x| computer.amplifier(x));
+            println!("Best signal with loopback is {} @ {:?}", amount_b, settings_b);
+        }
     }
  }

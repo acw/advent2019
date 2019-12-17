@@ -13,6 +13,10 @@ impl<T> Sender<T> {
         self.underlying.send(Some(t)).expect("Channel mysteriously closed on send.");
     }
 
+    pub fn send_ignore_error(&self, t: T) {
+        let _ = self.underlying.send(Some(t));
+    }
+
     pub fn conclude(&mut self) {
         self.underlying.send(None).expect("Failed to close channel.");
         self.done = true;

@@ -1,7 +1,9 @@
-use crate::endchannel::{Sender, Receiver};
+use crate::endchannel::{Sender, Receiver, channel};
 use std::fs;
 use std::iter::FromIterator;
+use std::ops::Range;
 use std::str;
+use std::thread;
 
 const ADD: i64       = 1;
 const MULTIPLY: i64  = 2;
@@ -155,10 +157,90 @@ impl Computer {
             self.step(input, output);
         }
     }
-}
 
-#[cfg(test)]
-use crate::endchannel::channel;
+    pub fn serialize(&self, inputs: Vec<i64>) -> i64 {
+        let mut previous_output = vec![0];
+
+        for input in inputs.iter() {
+            let mut my_machine = self.clone();
+            let (    mysend, mut corecv) = channel();
+            let (mut cosend,     myrecv) = channel();
+            mysend.send(*input);
+            for i in previous_output.iter() {
+                mysend.send(*i);
+            }
+            my_machine.run(&mut corecv, &mut cosend);
+            previous_output = myrecv.collect();
+        }
+
+        assert_eq!(previous_output.len(), 1);
+        previous_output[0]
+    }
+
+    pub fn find_best_signal<F>(&self, range: Range<i64>, f: F) -> (i64, Vec<i64>)
+      where F: Fn(Vec<i64>) -> i64
+    {
+        let mut best_score = 0;
+        let mut best_result = vec![];
+
+        for a in range.clone() {
+            for b in range.clone() {
+                if b == a { continue; }
+                for c in range.clone() {
+                    if c == a || c == b { continue; }
+                    for d in range.clone() {
+                        if d == c || d == b || d == a { continue; }
+                        for e in range.clone() {
+                            if e == d || e == c || e == b || e == a { continue; }
+                            let inputs = vec![a,b,c,d,e];
+                            let result = f(inputs);
+                            if result > best_score {
+                                best_score = result;
+                                best_result = vec![a,b,c,d,e];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        (best_score, best_result)
+    }
+
+    pub fn amplifier(&self, settings: Vec<i64>) -> i64 {
+        assert_eq!(settings.len(), 5);
+
+        let mut machine_a = self.clone();
+        let mut machine_b = self.clone();
+        let mut machine_c = self.clone();
+        let mut machine_d = self.clone();
+        let mut machine_e = self.clone();
+
+        let (    send_ha, mut recv_ha) = channel(); send_ha.send(settings[0]);
+        let (mut send_ab, mut recv_ab) = channel(); send_ab.send(settings[1]);
+        let (mut send_bc, mut recv_bc) = channel(); send_bc.send(settings[2]);
+        let (mut send_cd, mut recv_cd) = channel(); send_cd.send(settings[3]);
+        let (mut send_de, mut recv_de) = channel(); send_de.send(settings[4]);
+        let (mut send_eh,     recv_eh) = channel();
+
+        thread::spawn(move || { machine_a.run(&mut recv_ha, &mut send_ab) });
+        thread::spawn(move || { machine_b.run(&mut recv_ab, &mut send_bc) });
+        thread::spawn(move || { machine_c.run(&mut recv_bc, &mut send_cd) });
+        thread::spawn(move || { machine_d.run(&mut recv_cd, &mut send_de) });
+        thread::spawn(move || { machine_e.run(&mut recv_de, &mut send_eh) });
+
+        send_ha.send(0); // kick it off
+
+        let mut last_output = 0;
+
+        for output in recv_eh {
+            last_output = output;
+            send_ha.send_ignore_error(output);
+        }
+
+        last_output
+    }
+}
 
 #[cfg(test)]
 fn run_example(computer: Vec<i64>, inputs: Vec<i64>, targets: Vec<i64>) {
@@ -241,4 +323,34 @@ fn test_examples() {
                      1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,
                      999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99],
                 vec![192], vec![1001]);
+
+    let example7a = Computer::from_string("3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0", 0);
+    let result7a = example7a.serialize(vec![4,3,2,1,0]);
+    assert_eq!(43210, result7a);
+    let example7b = Computer::from_string("3,23,3,24,1002,24,10,24,1002,23,-1,23,101,5,23,23,1,24,23,23,4,23,99,0,0", 0);
+    let result7b = example7b.serialize(vec![0,1,2,3,4]);
+    assert_eq!(54321, result7b);
+    let example7c = Computer::from_string("3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0", 0);
+    let target7c = 65210;
+    let result7c = example7c.serialize(vec![1,0,4,3,2]);
+    assert_eq!(target7c, result7c);
+    let result7c2 = example7c.serialize(vec![1,0,4,3,2]);
+    assert_eq!(target7c, result7c2);
+    assert_eq!(result7c2, 65210);
+    assert_eq!(example7c.find_best_signal(0..5, |x| example7c.serialize(x)).1, vec![1,0,4,3,2]);
+    let day7a = Computer::load("inputs/day7", 0);
+    let (day7score, day7settings) = day7a.find_best_signal(0..5, |x| day7a.serialize(x));
+    assert_eq!(day7score, 206580);
+    assert_eq!(day7settings, vec![2,0,1,4,3]);
+
+    let example7e = Computer::from_string("3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5", 0);
+    assert_eq!(139629729, example7e.amplifier(vec![9,8,7,6,5]));
+    let (example7es, example7et) = example7e.find_best_signal(5..10, |x| example7e.amplifier(x));
+    assert_eq!(139629729, example7es);
+    assert_eq!(vec![9,8,7,6,5], example7et);
+    let example7f = Computer::from_string("3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,-5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10", 0);
+    assert_eq!(18216, example7f.amplifier(vec![9,7,8,5,6]));
+    let (example7fs, example7ft) = example7f.find_best_signal(5..10, |x| example7f.amplifier(x));
+    assert_eq!(18216, example7fs);
+    assert_eq!(vec![9,7,8,5,6], example7ft);
 }
