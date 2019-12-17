@@ -1,13 +1,14 @@
 mod args;
+mod endchannel;
 mod fuel;
 mod machine;
 mod wiremap;
 
 use crate::args::Command;
+use crate::endchannel::channel;
 use crate::fuel::calculate_fuel;
 use crate::wiremap::WireMap;
 use std::cmp::{max,min};
-use std::sync::mpsc::channel;
 
 fn main() {
     match Command::get() {
@@ -24,14 +25,14 @@ fn main() {
         }
 
         Command::RunComputer(mut initial) => {
-            let (my_sender,    their_receiver) = channel();
-            let (their_sender, my_receiver)    = channel();
+            let (my_sender,    mut their_receiver) = channel();
+            let (mut their_sender, my_receiver)    = channel();
             println!("Initial Computer:");
             initial.show();
-            println!("Running, with input 1.");
-            my_sender.send(1).expect("Initial send failed");
-            initial.run(&their_receiver, &their_sender);
-            for val in my_receiver.iter() {
+            println!("Running, with input 5.");
+            my_sender.send(5);
+            initial.run(&mut their_receiver, &mut their_sender);
+            for val in my_receiver {
                 println!("Received value: {}", val);
             }
         }
