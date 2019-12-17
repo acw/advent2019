@@ -1,5 +1,6 @@
 use clap::{App,Arg,SubCommand};
 use crate::machine::Computer;
+use crate::orbits::UniversalOrbitMap;
 use crate::wiremap::{Wire};
 use std::fs;
 use std::iter::FromIterator;
@@ -10,6 +11,7 @@ pub enum Command {
     ComputeFuel(Vec<u64>),
     RunComputer(Computer),
     WireMap(Vec<Wire>),
+    Orbits(UniversalOrbitMap),
     PasswordCrack(u32, u32),
 }
 
@@ -63,6 +65,14 @@ impl Command {
                                                  .required(true)
                                                  .validator(is_file))
                                         )
+                            .subcommand(SubCommand::with_name("orbits")
+                                        .about("compute the given orbit map")
+                                        .arg(Arg::with_name("MAP")
+                                                 .index(1)
+                                                 .help("The orbits to run.")
+                                                 .required(true)
+                                                 .validator(is_file))
+                                        )
                            .subcommand(SubCommand::with_name("crack")
                                         .about("crack a code in the given range")
                                         .arg(Arg::with_name("START")
@@ -77,7 +87,7 @@ impl Command {
                                                  .validator(is_number))
                                         )
                           .get_matches();
-    
+
         if let Some(problem1) = matches.subcommand_matches("fuel") {
             match problem1.values_of("NUM") {
                 None =>
@@ -88,7 +98,7 @@ impl Command {
                }
             }
         }
-    
+
         if let Some(problem2) = matches.subcommand_matches("compute") {
             let start_pos_str = problem2.value_of("START_POSITION").unwrap();
             let start_pos = usize::from_str_radix(&start_pos_str, 10).unwrap();
@@ -120,7 +130,14 @@ impl Command {
 
             return Command::PasswordCrack(start, end);
         }
-    
+
+        if let Some(problem5) = matches.subcommand_matches("orbits") {
+            let file_contents = fs::read(problem5.value_of("MAP").unwrap()).unwrap();
+            let str_contents = str::from_utf8(&file_contents).unwrap();
+            let res = UniversalOrbitMap::from_str(&str_contents).unwrap();
+            return Command::Orbits(res);
+        }
+
         panic!("Failed to run a reasonable command.");
     }
 }

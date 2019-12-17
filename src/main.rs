@@ -2,6 +2,7 @@ mod args;
 mod endchannel;
 mod fuel;
 mod machine;
+mod orbits;
 mod wiremap;
 
 use crate::args::Command;
@@ -101,6 +102,11 @@ fn main() {
 
             // 353 is wrong (low)
             println!("Successful digits: {}", count);
+        }
+
+        Command::Orbits(uom) => {
+            println!("Got orbits.");
+            println!("Base map has {} orbits.", uom.num_orbits());
         }
     }
  }
