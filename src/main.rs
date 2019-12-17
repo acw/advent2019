@@ -8,6 +8,7 @@ mod wiremap;
 use crate::args::Command;
 use crate::endchannel::channel;
 use crate::fuel::calculate_fuel;
+use crate::orbits::Object;
 use crate::wiremap::WireMap;
 use std::cmp::{max,min};
 
@@ -105,8 +106,26 @@ fn main() {
         }
 
         Command::Orbits(uom) => {
-            println!("Got orbits.");
+            println!("Got orbits:");
+            uom.show();
             println!("Base map has {} orbits.", uom.num_orbits());
+            match uom.find_path(&Object::new("YOU"), &Object::new("SAN")) {
+                None =>
+                    println!("There is no path from you to Santa. :("),
+                Some(path) => {
+                    print!("The path from you to Santa is: ");
+                    let mut path_iter = path.iter().peekable();
+
+                    while let Some(x) = path_iter.next() {
+                        print!("{}", x);
+                        if path_iter.peek().is_some() {
+                            print!(" => ");
+                        }
+                    }
+                    println!("");
+                    println!("  ... so the number of transfers needed is {}", path.len() - 3);
+                }
+            }
         }
     }
  }
