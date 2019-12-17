@@ -18,7 +18,7 @@ impl<T> Sender<T> {
     }
 
     pub fn conclude(&mut self) {
-        self.underlying.send(None).expect("Failed to close channel.");
+        let _ = self.underlying.send(None);
         self.done = true;
     }
 }
