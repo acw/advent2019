@@ -71,6 +71,7 @@ impl FromStr for UniversalOrbitMap {
 }
 
 impl UniversalOrbitMap {
+    #[cfg(test)]
     fn orbits(&self, obj1: &Object, obj2: &Object) -> bool {
         match self.orbits.get(obj2) {
             None => false,
@@ -80,6 +81,7 @@ impl UniversalOrbitMap {
         }
     }
 
+    #[cfg(test)]
     fn indirectly_orbits(&self, obj1: &Object, obj2: &Object) -> bool {
         let mut search_stack = vec![obj2];
         let mut history = vec![];
@@ -107,19 +109,6 @@ impl UniversalOrbitMap {
         }
 
         false
-    }
-
-    fn objects(&self) -> Vec<Object> {
-        let mut res = vec![];
-
-        for (key, vals) in self.orbits.iter() {
-            if !res.contains(key) { res.push(key.clone()); };
-            for val in vals.iter() {
-                if !res.contains(val) { res.push(val.clone()); };
-            }
-        }
-
-        res
     }
 
     pub fn num_orbits(&self) -> usize {
@@ -154,7 +143,6 @@ impl UniversalOrbitMap {
 
     fn path_from_origin(&self, obj: &Object) -> Option<Vec<Object>> {
         let mut search_stack = vec![(Object::CenterOfMass, vec![Object::CenterOfMass])];
-        let mut total = 0;
 
         while let Some((nextobj, mut path)) = search_stack.pop() {
             if &nextobj == obj {
