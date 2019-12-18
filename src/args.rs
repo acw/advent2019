@@ -1,4 +1,5 @@
 use clap::{App,Arg,SubCommand};
+use crate::image::Image;
 use crate::machine::Computer;
 use crate::orbits::UniversalOrbitMap;
 use crate::wiremap::{Wire};
@@ -14,6 +15,7 @@ pub enum Command {
     Orbits(UniversalOrbitMap),
     PasswordCrack(u32, u32),
     Amplify(Computer),
+    Image(Image),
 }
 
 fn is_number(s: String) -> Result<(), String> {
@@ -95,6 +97,26 @@ impl Command {
                                                  .required(true)
                                                  .validator(is_file))
                                         )
+                           .subcommand(SubCommand::with_name("image")
+                                        .about("run the given image analysis task")
+                                        .arg(Arg::with_name("WIDTH")
+                                                 .short("w")
+                                                 .long("width")
+                                                 .help("The width of the image.")
+                                                 .default_value("25")
+                                                 .validator(is_number))
+                                        .arg(Arg::with_name("HEIGHT")
+                                                 .short("h")
+                                                 .long("height")
+                                                 .help("The height of the image.")
+                                                 .default_value("6")
+                                                 .validator(is_number))
+                                        .arg(Arg::with_name("IMAGE")
+                                                 .index(1)
+                                                 .help("The image to use.")
+                                                 .required(true)
+                                                 .validator(is_file))
+                                        )
                            .get_matches();
 
         if let Some(problem1) = matches.subcommand_matches("fuel") {
@@ -150,6 +172,14 @@ impl Command {
         if let Some(problem6) = matches.subcommand_matches("amplify") {
             let computer = Computer::load(problem6.value_of("COMPUTER").unwrap(), 0);
             return Command::Amplify(computer);
+        }
+
+        if let Some(problem7) = matches.subcommand_matches("image") {
+            let height = usize::from_str_radix(&problem7.value_of("HEIGHT").unwrap(), 10).unwrap();
+            let width  = usize::from_str_radix(&problem7.value_of("WIDTH").unwrap(), 10).unwrap();
+            let file_contents = fs::read(problem7.value_of("IMAGE").unwrap()).unwrap();
+            let image_data = str::from_utf8(&file_contents).unwrap();
+            return Command::Image(Image::new(width, height, image_data).unwrap());
         }
  
         panic!("Failed to run a reasonable command.");

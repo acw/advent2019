@@ -1,6 +1,7 @@
 mod args;
 mod endchannel;
 mod fuel;
+mod image;
 mod machine;
 mod orbits;
 mod wiremap;
@@ -16,13 +17,13 @@ fn main() {
     match Command::get() {
         Command::ComputeFuel(masses) => {
             let mut total = 0;
-    
+
             for mass in masses {
                 let fuel = calculate_fuel(mass);
                 println!("Mass {}: {} fuel", mass, fuel);
                 total += fuel;
             }
-    
+
             println!("TOTAL FUEL: {}", total);
         }
 
@@ -133,6 +134,27 @@ fn main() {
             println!("Best signal without loopback is {} @ {:?}", amount_a, settings_a);
             let (amount_b, settings_b) = computer.find_best_signal(5..10, |x| computer.amplifier(x));
             println!("Best signal with loopback is {} @ {:?}", amount_b, settings_b);
+        }
+
+        Command::Image(image) => {
+            let zero_byte_counts = image.digits_per_layer(0);
+            let mut lowest_score = usize::max_value();
+            let mut lowest_idx   = 0;
+
+            for (idx, layer_count) in zero_byte_counts.iter().enumerate() {
+                if layer_count < &lowest_score {
+                    lowest_score = *layer_count;
+                    lowest_idx = idx;
+                }
+            }
+
+            println!("Fewest number of zeros at layer {} [{} zeros]", lowest_idx, lowest_score);
+            let one_digits = image.digits_for_layer(lowest_idx, 1);
+            println!("Layer {} has {} one digits.", lowest_idx, one_digits);
+            let two_digits = image.digits_for_layer(lowest_idx, 2);
+            println!("Layer {} has {} two digits.", lowest_idx, two_digits);
+            println!("Multiplied together is {}", one_digits * two_digits);
+            image.draw();
         }
     }
  }
