@@ -4,6 +4,7 @@ mod fuel;
 mod image;
 mod machine;
 mod orbits;
+mod robot;
 mod wiremap;
 
 use crate::args::Command;

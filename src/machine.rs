@@ -17,7 +17,7 @@ const ADJUST_BASE: i64 = 9;
 const HALT: i64        = 99;
 
 #[derive(Debug,PartialEq)]
-enum Mode {
+pub enum Mode {
     Position,
     Immediate,
     Relative,

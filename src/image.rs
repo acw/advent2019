@@ -1,7 +1,7 @@
 use bytecount::count;
 
-const WHITE: char = ' ';
-const BLACK: char = '\u{2588}';
+pub const WHITE: char = ' ';
+pub const BLACK: char = '\u{2588}';
 
 #[derive(Debug)]
 pub enum ImageParseError {
