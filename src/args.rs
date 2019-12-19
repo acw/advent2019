@@ -1,4 +1,5 @@
 use clap::{App,Arg,SubCommand};
+use crate::arcade::Arcade;
 use crate::image::Image;
 use crate::machine::Computer;
 use crate::orbits::UniversalOrbitMap;
@@ -16,6 +17,7 @@ pub enum Command {
     PasswordCrack(u32, u32),
     Amplify(Computer),
     Image(Image),
+    Arcade(Arcade),
 }
 
 fn is_number(s: String) -> Result<(), String> {
@@ -39,6 +41,13 @@ impl Command {
                           .version("1.0")
                           .author("Adam Wick <awick@uhsure.com>")
                           .about("Runs advent of code programs")
+                          .subcommand(SubCommand::with_name("arcade")
+                                        .about("Play the arcade game!!")
+                                        .arg(Arg::with_name("FILE")
+                                                 .help("The arcade program")
+                                                 .index(1)
+                                                 .validator(is_file))
+                                        )
                           .subcommand(SubCommand::with_name("fuel")
                                         .about("runs the fuel computation from day1")
                                         .arg(Arg::with_name("NUM")
@@ -180,6 +189,12 @@ impl Command {
             let file_contents = fs::read(problem7.value_of("IMAGE").unwrap()).unwrap();
             let image_data = str::from_utf8(&file_contents).unwrap();
             return Command::Image(Image::new(width, height, image_data).unwrap());
+        }
+
+        if let Some(arcade) = matches.subcommand_matches("arcade") {
+            let file = arcade.value_of("FILE").expect("No arcade file!");
+            let arcade = Arcade::new(38, 21, true, file);
+            return Command::Arcade(arcade);
         }
  
         panic!("Failed to run a reasonable command.");

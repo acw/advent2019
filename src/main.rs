@@ -1,3 +1,4 @@
+mod arcade;
 mod args;
 mod endchannel;
 mod fuel;
@@ -7,12 +8,14 @@ mod orbits;
 mod robot;
 mod wiremap;
 
+use crate::arcade::{auto_move, Move};
 use crate::args::Command;
 use crate::endchannel::channel;
 use crate::fuel::calculate_fuel;
 use crate::orbits::Object;
 use crate::wiremap::WireMap;
 use std::cmp::{max,min};
+use terminal_graphics::Display;
 
 fn main() {
     match Command::get() {
@@ -156,6 +159,17 @@ fn main() {
             println!("Layer {} has {} two digits.", lowest_idx, two_digits);
             println!("Multiplied together is {}", one_digits * two_digits);
             image.draw();
+        }
+
+        Command::Arcade(mut arcade) => {
+            let mut screen = Display::new(40, 40);
+
+            screen.clear();
+            while arcade.process_update(auto_move) {
+                arcade.draw(&mut screen);
+                screen.print();
+            }
+            println!("Final score: {}", arcade.score);
         }
     }
  }
