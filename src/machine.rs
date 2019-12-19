@@ -5,23 +5,40 @@ use std::ops::Range;
 use std::str;
 use std::thread;
 
-const ADD: i64       = 1;
-const MULTIPLY: i64  = 2;
-const INPUT: i64     = 3;
-const OUTPUT: i64    = 4;
-const JMPIF: i64     = 5;
-const JMPNIF: i64    = 6;
-const LESS_THAN: i64 = 7;
-const EQUALS: i64    = 8;
-const HALT: i64      = 99;
+const ADD: i64         = 1;
+const MULTIPLY: i64    = 2;
+const INPUT: i64       = 3;
+const OUTPUT: i64      = 4;
+const JMPIF: i64       = 5;
+const JMPNIF: i64      = 6;
+const LESS_THAN: i64   = 7;
+const EQUALS: i64      = 8;
+const ADJUST_BASE: i64 = 9;
+const HALT: i64        = 99;
 
-const MODE_POSITION:  i64 = 0;
-const MODE_IMMEDIATE: i64 = 1;
+#[derive(Debug,PartialEq)]
+enum Mode {
+    Position,
+    Immediate,
+    Relative,
+}
+
+impl From<i64> for Mode {
+    fn from(x: i64) -> Mode {
+        match x {
+            0 => Mode::Position,
+            1 => Mode::Immediate,
+            2 => Mode::Relative,
+            _ => panic!("Unknown mode value: {}", x),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Computer {
     memory: Vec<i64>,
     position: usize,
+    relative_base: i64,
     done: bool
 }
 
@@ -43,7 +60,7 @@ impl Computer {
             memory.push(next);
         }
 
-        Computer{ memory, position, done: false }
+        Computer{ memory, position, relative_base: 0, done: false }
     }
 
     pub fn show(&self) {
@@ -53,34 +70,56 @@ impl Computer {
        println!("POSITION: {}", self.position);
     }
 
-    pub fn read(&self, idx: usize) -> i64 {
+    pub fn read(&mut self, idx: usize) -> i64 {
+        if idx >= self.memory.len() {
+            self.memory.resize(idx + 1, 0);
+        }
         self.memory[idx]
     }
 
-    pub fn read_arg(&self, mode: i64, val: usize) -> i64 {
+    pub fn read_arg(&mut self, mode: Mode, val: usize) -> i64 {
         match mode {
-            MODE_POSITION  => self.read(self.read(val) as usize),
-            MODE_IMMEDIATE => self.read(val),
-            _ => panic!("Unknown argument mode: {}", mode)
+            Mode::Position => {
+                let ptr = self.read(val) as usize;
+                self.read(ptr)
+            }
+            Mode::Immediate => self.read(val),
+            Mode::Relative  => {
+                let ptr = self.read(val) + self.relative_base;
+                self.read(ptr as usize)
+            }
         }
     }
 
+    fn read_dest(&mut self, mode: Mode, val: usize) -> usize {
+        assert_ne!(mode, Mode::Immediate);
+        let mut base = self.read(val);
+        if mode == Mode::Relative {
+            base += self.relative_base;
+        }
+        assert!(base >= 0);
+        base as usize
+    }
+
     pub fn write(&mut self, idx: usize, val: i64) {
+        if idx >= self.memory.len() {
+            self.memory.resize(idx + 1, 0);
+        }
         self.memory[idx] = val;
     }
 
     fn step(&mut self, input: &mut Receiver<i64>, output: &mut Sender<i64>) {
         let next_instruction = self.read(self.position);
         let opcode = next_instruction % 100;
-        let arg1mode = (next_instruction / 100) % 10;
-        let arg2mode = (next_instruction / 1000) % 10;
-        let _arg3mode = (next_instruction / 10000) % 10;
+        let arg1mode = Mode::from((next_instruction / 100) % 10);
+        let arg2mode = Mode::from((next_instruction / 1000) % 10);
+        let arg3mode = Mode::from((next_instruction / 10000) % 10);
 
         match opcode {
             ADD => {
                 let arg1 = self.read_arg(arg1mode, self.position + 1);
                 let arg2 = self.read_arg(arg2mode, self.position + 2);
-                let dest = self.read(self.position + 3) as usize;
+                let dest = self.read_dest(arg3mode, self.position + 3) as usize;
 
                 self.write(dest, arg1 + arg2);
                 self.position += 4;
@@ -88,25 +127,28 @@ impl Computer {
             MULTIPLY => {
                 let arg1 = self.read_arg(arg1mode, self.position + 1);
                 let arg2 = self.read_arg(arg2mode, self.position + 2);
-                let dest = self.read(self.position + 3) as usize;
+                let dest = self.read_dest(arg3mode, self.position + 3) as usize;
 
                 self.write(dest, arg1 * arg2);
                 self.position += 4;
             }
             INPUT => {
-                let dest = self.read(self.position + 1) as usize;
+                let dest = self.read_dest(arg1mode, self.position + 1) as usize;
                 let val = input.recv().expect("Failed to get input!");
+
                 self.write(dest, val);
                 self.position += 2;
             }
             OUTPUT => {
                 let arg1 = self.read_arg(arg1mode, self.position + 1);
+
                 output.send(arg1);
                 self.position += 2;
             }
             JMPIF => {
                 let arg1 = self.read_arg(arg1mode, self.position + 1);
                 let arg2 = self.read_arg(arg2mode, self.position + 2);
+
                 if arg1 != 0 {
                     self.position = arg2 as usize;
                 } else {
@@ -116,6 +158,7 @@ impl Computer {
             JMPNIF => {
                 let arg1 = self.read_arg(arg1mode, self.position + 1);
                 let arg2 = self.read_arg(arg2mode, self.position + 2);
+
                 if arg1 == 0 {
                     self.position = arg2 as usize;
                 } else {
@@ -125,7 +168,7 @@ impl Computer {
             LESS_THAN => {
                 let arg1 = self.read_arg(arg1mode, self.position + 1);
                 let arg2 = self.read_arg(arg2mode, self.position + 2);
-                let dest = self.read(self.position + 3) as usize;
+                let dest = self.read_dest(arg3mode, self.position + 3) as usize;
 
                 self.write(dest, if arg1 < arg2 { 1 } else { 0 });
                 self.position += 4;
@@ -133,10 +176,16 @@ impl Computer {
             EQUALS => {
                 let arg1 = self.read_arg(arg1mode, self.position + 1);
                 let arg2 = self.read_arg(arg2mode, self.position + 2);
-                let dest = self.read(self.position + 3) as usize;
+                let dest = self.read_dest(arg3mode,self.position + 3) as usize;
 
                 self.write(dest, if arg1 == arg2 { 1 } else { 0 });
                 self.position += 4;
+            }
+            ADJUST_BASE => {
+                let arg1 = self.read_arg(arg1mode, self.position + 1);
+
+                self.relative_base += arg1;
+                self.position += 2;
             }
             HALT => {
                 output.conclude();
@@ -244,13 +293,18 @@ impl Computer {
 
 #[cfg(test)]
 fn run_example(computer: Vec<i64>, inputs: Vec<i64>, targets: Vec<i64>) {
-    let mut day5a = Computer{ memory: computer, position: 0, done: false };
+    let day5a = Computer{ memory: computer, position: 0, relative_base: 0, done: false };
+    run_computer(day5a, inputs, targets);
+}
+
+#[cfg(test)]
+fn run_computer(mut computer: Computer, inputs: Vec<i64>, targets: Vec<i64>) {
     let (    mysend, mut corecv) = channel();
     let (mut cosend,     myrecv) = channel();
     for i in inputs.iter() {
         mysend.send(*i);
     }
-    day5a.run(&mut corecv, &mut cosend);
+    computer.run(&mut corecv, &mut cosend);
     let outputs: Vec<i64> = myrecv.collect();
     assert_eq!(targets, outputs);
 }
@@ -259,35 +313,35 @@ fn run_example(computer: Vec<i64>, inputs: Vec<i64>, targets: Vec<i64>) {
 fn test_examples() {
     let (mut deadsend, mut deadrecv) = channel();
 
-    let mut example1 = Computer{ memory: vec![1,0,0,0,99], position: 0, done: false };
-    let answer1  = Computer{ memory: vec![2,0,0,0,99], position: 4, done: false };
+    let mut example1 = Computer::from_string("1,0,0,0,99", 0);
+    let answer1  = Computer{ memory: vec![2,0,0,0,99], position: 4, relative_base: 0, done: false };
     example1.step(&mut deadrecv, &mut deadsend);
     assert_eq!(example1, answer1);
 
-    let mut example2 = Computer{ memory: vec![2,3,0,3,99], position: 0, done: false };
-    let answer2 = Computer{ memory: vec![2,3,0,6,99], position: 4, done: false };
+    let mut example2 = Computer::from_string("2,3,0,3,99", 0);
+    let answer2 = Computer{ memory: vec![2,3,0,6,99], position: 4, relative_base: 0, done: false };
     example2.step(&mut deadrecv, &mut deadsend);
     assert_eq!(example2, answer2);
 
-    let mut example3 = Computer{ memory: vec![2,4,4,5,99,0], position: 0, done: false };
-    let answer3 = Computer{ memory: vec![2,4,4,5,99,9801], position: 4, done: false };
+    let mut example3 = Computer::from_string("2,4,4,5,99,0", 0);
+    let answer3 = Computer{ memory: vec![2,4,4,5,99,9801], position: 4, relative_base: 0, done: false };
     example3.step(&mut deadrecv, &mut deadsend);
     assert_eq!(example3, answer3);
 
-    let mut example4 = Computer{ memory: vec![1,1,1,4,99,5,6,0,99], position: 0, done: false };
-    let answer4 = Computer{ memory: vec![30,1,1,4,2,5,6,0,99], position: 8, done: true };
+    let mut example4 = Computer::from_string("1,1,1,4,99,5,6,0,99", 0);
+    let answer4 = Computer{ memory: vec![30,1,1,4,2,5,6,0,99], position: 8, relative_base: 0, done: true };
     example4.run(&mut deadrecv, &mut deadsend);
     assert_eq!(example4, answer4);
     assert!(example4.halted());
 
-    let mut example5 = Computer{ memory: vec![1002,4,3,4,33], position: 0, done: false };
-    let answer5 = Computer{ memory: vec![1002,4,3,4,99], position: 4, done: true };
+    let mut example5 = Computer::from_string("1002,4,3,4,33", 0);
+    let answer5 = Computer{ memory: vec![1002,4,3,4,99], position: 4, relative_base: 0, done: true };
     example5.run(&mut deadrecv, &mut deadsend);
     assert_eq!(example5, answer5);
     assert!(example5.halted());
 
     let mut example6 = Computer::from_string("1101,100,-1,4,0", 0);
-    let answer6 = Computer{ memory: vec![1101,100,-1,4,99], position: 4, done: true };
+    let answer6 = Computer{ memory: vec![1101,100,-1,4,99], position: 4, relative_base: 0, done: true };
     example6.run(&mut deadrecv, &mut deadsend);
     assert_eq!(example6, answer6);
     assert!(example6.halted());
@@ -353,4 +407,17 @@ fn test_examples() {
     let (example7fs, example7ft) = example7f.find_best_signal(5..10, |x| example7f.amplifier(x));
     assert_eq!(18216, example7fs);
     assert_eq!(vec![9,7,8,5,6], example7ft);
+
+    run_example(vec![109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99],
+                vec![],
+                vec![109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99]);
+    run_example(vec![1102,34915192,34915192,7,4,7,99,0],
+                vec![],
+                vec![1219070632396864]);
+    run_example(vec![104,1125899906842624,99],
+                vec![],
+                vec![1125899906842624]);
+
+    run_computer(Computer::load("inputs/day9", 0), vec![1], vec![3063082071]);
+    run_computer(Computer::load("inputs/day9", 0), vec![2], vec![81348]);
 }
