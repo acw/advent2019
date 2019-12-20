@@ -5,6 +5,7 @@ mod fuel;
 mod image;
 mod machine;
 mod orbits;
+mod repair;
 mod robot;
 mod wiremap;
 
