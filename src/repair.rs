@@ -170,6 +170,47 @@ impl RepairSearch {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+enum Tile {
+    Unknown,
+    Empty,
+    Wall,
+    Oxygen,
+}
+
+struct Room {
+    layout: Vec<Tile>,
+    computer_input: Sender<i64>,
+    computer_output: Receiver<i64>,
+    width: usize,
+    height: usize,
+    x: usize,
+    y: usize,
+}
+
+impl Room {
+    fn new(width: usize, height: usize, f: &str) -> Room {
+        let (mut mysend, mut corecv) = channel();
+        let (mut cosend, mut myrecv) = channel();
+        let my_computer = Computer::load(f, 0);
+        let mut layout = Vec::with_capacity(width * height);
+       
+        layout.resize(width * height, Tile::Unknown);
+        Room{
+            layout,
+            computer_input: mysend,
+            computer_output: myrecv,
+            width, height,
+            x: width / 2,
+            y: height / 2,
+        }
+    }
+
+    fn room_mapped() -> bool {
+        
+    }
+}
+
 #[test]
 fn day15() {
     let mut day15a = RepairSearch::new("inputs/day15");
