@@ -61,10 +61,36 @@ impl Path {
         for dir in ALL_DIRECTIONS.iter() {
             let mut copy = self.steps.clone();
             copy.push(*dir);
-            res.push(Path{ steps: copy });
+            let potential = Path{ steps: copy };
+            if !potential.loops() {
+                res.push(potential);
+            }
         }
 
         res
+    }
+
+    fn loops(&self) -> bool {
+        let mut previous = vec![];
+        let mut x: i64 = 0;
+        let mut y: i64 = 0;
+
+        for step in self.steps.iter() {
+            match step {
+                Direction::North => y -= 1,
+                Direction::South => y += 1,
+                Direction::East  => x += 1,
+                Direction::West  => x -= 1,
+            }
+
+            if previous.contains(&(x, y)) {
+                return true;
+            }
+
+            previous.push((x, y));
+        }
+
+        false
     }
 }
 
@@ -97,23 +123,26 @@ impl RepairSearch {
     }
 
     fn try_path(&mut self, path: &Path) -> MoveResult {
-        let (    mysend, mut corecv) = channel();
+        let (mut mysend, mut corecv) = channel();
         let (mut cosend, mut myrecv) = channel();
         let my_computer = self.computer.clone();
-
-        for step in path.steps.iter() {
-            mysend.send(step.encode());
-        }
-
-        thread::spawn(move || my_computer.clone().run(&mut corecv, &mut cosend));
         let mut last_response = MoveResult::Done;
 
-        for response in myrecv.take(path.steps.len()) {
-            last_response = MoveResult::new(response);
-            if last_response == MoveResult::HitWall {
-                break
+        thread::spawn(move || my_computer.clone().run(&mut corecv, &mut cosend));
+        for step in path.steps.iter() {
+            mysend.send(step.encode());
+            match myrecv.recv() {
+                None =>
+                    return last_response,
+                Some(response) => {
+                    last_response = MoveResult::new(response);
+                    if last_response == MoveResult::HitWall {
+                        break
+                    }
+                }
             }
         }
+        mysend.conclude();
 
         last_response
     }
@@ -144,5 +173,5 @@ impl RepairSearch {
 #[test]
 fn day15() {
     let mut day15a = RepairSearch::new("inputs/day15");
-    assert_eq!(0, day15a.run_search());
+    assert_eq!(298, day15a.run_search());
 }

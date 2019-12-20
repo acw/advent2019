@@ -134,10 +134,17 @@ impl Computer {
             }
             INPUT => {
                 let dest = self.read_dest(arg1mode, self.position + 1) as usize;
-                let val = input.recv().expect("Failed to get input!");
 
-                self.write(dest, val);
-                self.position += 2;
+                match input.recv() {
+                    None => {
+                        output.conclude();
+                        self.done = true;
+                    }
+                    Some(val) => {
+                        self.write(dest, val);
+                        self.position += 2;
+                    }
+                }
             }
             OUTPUT => {
                 let arg1 = self.read_arg(arg1mode, self.position + 1);
