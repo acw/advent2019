@@ -1,5 +1,6 @@
 use crate::endchannel::{Receiver, Sender, channel};
 use crate::machine::Computer;
+use std::collections::VecDeque;
 use std::thread;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -8,6 +9,27 @@ enum Direction {
     East,
     South,
     West,
+}
+
+impl Direction {
+    fn apply(&self, x: usize, y: usize) -> (usize, usize) {
+        match self {
+            Direction::North => (x, y - 1),
+            Direction::East  => (x + 1, y),
+            Direction::South => (x, y + 1),
+            Direction::West  => (x - 1, y),
+        }
+    }
+
+    fn random() -> Direction {
+        match rand::random::<u8>() & 0x3 {
+            0 => Direction::North,
+            1 => Direction::East,
+            2 => Direction::South,
+            3 => Direction::West,
+            _ => panic!("The world broke")
+        }
+    }
 }
 
 const ALL_DIRECTIONS: [Direction; 4] = [Direction::North,
@@ -154,7 +176,6 @@ impl RepairSearch {
             let mut new_horizon = vec![];
 
             assert_ne!(horizon.len(), 0);
-            println!("{} items at length {}", horizon.len(), horizon[0].steps.len());
             for path in horizon.iter() {
                 let result = self.try_path(path);
 
@@ -170,7 +191,7 @@ impl RepairSearch {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Tile {
     Unknown,
     Empty,
@@ -192,10 +213,11 @@ impl Room {
     fn new(width: usize, height: usize, f: &str) -> Room {
         let (mut mysend, mut corecv) = channel();
         let (mut cosend, mut myrecv) = channel();
-        let my_computer = Computer::load(f, 0);
+        let mut my_computer = Computer::load(f, 0);
         let mut layout = Vec::with_capacity(width * height);
-       
+
         layout.resize(width * height, Tile::Unknown);
+        thread::spawn(move || my_computer.run(&mut corecv, &mut cosend));
         Room{
             layout,
             computer_input: mysend,
@@ -206,13 +228,161 @@ impl Room {
         }
     }
 
-    fn room_mapped() -> bool {
-        
+    fn get(&self, x: usize, y: usize) -> Tile {
+        self.layout[ (y * self.width) + x ]
     }
+
+    fn set(&mut self, x: usize, y: usize, t: Tile) {
+        self.layout[ (y * self.width) + x ] = t;
+    }
+
+    fn valid_nexts(&self, x: usize, y: usize) -> Vec<(Direction, usize, usize)>
+    {
+        let mut res = vec![];
+
+        if y > 0                 { res.push((Direction::North, x, y - 1)); }
+        if x > 0                 { res.push((Direction::West,  x - 1, y)); }
+        if y < (self.height - 1) { res.push((Direction::South, x, y + 1)); }        
+        if x < (self.width - 1)  { res.push((Direction::East,  x + 1, y)); }
+
+        res
+    }
+
+    fn print(&self) {
+        println!("\n\n\n\n\n\n");
+        for y in 0..self.height {
+            for x in 0..self.width {
+                if self.x == x && self.y == y {
+                    print!("R");
+                    continue;
+                }
+                match self.get(x, y) {
+                    Tile::Unknown => print!("?"),
+                    Tile::Empty   => print!("."),
+                    Tile::Oxygen  => print!("O"),
+                    Tile::Wall    => print!("X"),
+                }
+            }
+            println!();
+        }
+    }
+
+    fn next_unknown(&self) -> Option<Direction> {
+        let mut visited = vec![];
+        let mut queue = VecDeque::new();
+
+        // self.print();
+        queue.extend(self.valid_nexts(self.x, self.y).iter());
+        while let Some((dir, x, y)) = queue.pop_front() {
+            // println!("Visiting ({:?}, {}, {})", dir, x, y);
+            match self.get(x, y) {
+                Tile::Unknown => return Some(dir),
+                Tile::Wall    => continue,
+                _             => {
+                    for (_, newx, newy) in self.valid_nexts(x, y) {
+                        if !visited.contains(&(newx, newy)) {
+                            queue.push_back((dir, newx, newy));
+                        }
+                    }
+                    visited.push((x, y));
+                }
+            }
+        }
+
+        None
+    }
+
+    fn step(&mut self, direction: Direction) -> bool {
+        let (tx, ty) = direction.apply(self.x, self.y);
+
+        if self.get(tx, ty) == Tile::Wall {
+            return false;
+        }
+
+        self.computer_input.send(direction.encode());
+        match self.computer_output.recv() {
+            None => false,
+            Some(resp) => {
+                let response = MoveResult::new(resp);
+
+                match response {
+                    MoveResult::HitWall => {
+                        self.set(tx, ty, Tile::Wall);
+                        false
+                    }
+                    MoveResult::Done => {
+                        self.set(tx, ty, Tile::Empty);
+                        self.x = tx;
+                        self.y = ty;
+                        true
+                    }
+                    MoveResult::FoundSystem => {
+                        self.set(tx, ty, Tile::Oxygen);
+                        self.x = tx;
+                        self.y = ty;
+                        true
+                    }
+                }
+            }
+        }
+    }
+
+    fn map_room(&mut self) -> usize {
+        let mut steps = 0;
+
+        while let Some(next_step) = self.next_unknown() {
+            //println!("Steps taken: {} [x {}, y {}, next {:?}]", steps, self.x, self.y, next_step);
+            self.step(next_step);
+            steps += 1;
+        }
+
+        steps
+    }
+
+    fn has_empty_space(&self) -> bool {
+        for tile in self.layout.iter() {
+            if tile == &Tile::Empty {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn spread(&mut self) -> usize {
+        let mut steps = 0;
+
+        while self.has_empty_space() {
+            let snapshot = self.layout.clone();
+
+            for x in 0..self.width {
+                for y in 0..self.height {
+                    if snapshot[ (y * self.width) + x ] == Tile::Oxygen {
+                        for (_, nx, ny) in self.valid_nexts(x, y).iter() {
+                            if snapshot[ (*ny * self.width) + *nx ] == Tile::Empty {
+                                self.set(*nx, *ny, Tile::Oxygen);
+                            }
+                        }
+                    }
+                }
+            }
+            steps += 1; 
+            //self.print();
+        }
+
+        steps
+    } 
 }
 
 #[test]
-fn day15() {
+fn day15a() {
     let mut day15a = RepairSearch::new("inputs/day15");
     assert_eq!(298, day15a.run_search());
+}
+
+#[test]
+fn day15b() {
+    let mut day15b = Room::new(50, 50, "inputs/day15");
+    assert!(day15b.next_unknown().is_some());
+    assert_eq!(2452, day15b.map_room());
+    assert_eq!(346, day15b.spread());
 }
