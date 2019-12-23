@@ -8,6 +8,7 @@ mod orbits;
 mod repair;
 #[cfg(test)]
 mod robot;
+mod scaffold;
 mod wiremap;
 
 use crate::args::Command;
