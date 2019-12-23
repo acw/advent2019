@@ -43,13 +43,13 @@ pub struct Computer {
 }
 
 impl Computer {
-    pub fn load(path: &str, position: usize) -> Computer {
+    pub fn load(path: &str) -> Computer {
         let byte_buffer = fs::read(path).unwrap();
         let char_buffer = str::from_utf8(&byte_buffer).unwrap();
-        Computer::from_string(&char_buffer, position)
+        Computer::from_string(&char_buffer)
     }
 
-    fn from_string(char_buffer: &str, position: usize) -> Computer {
+    fn from_string(char_buffer: &str) -> Computer {
         let mut memory = vec![];
         let mut char_iter = char_buffer.chars().peekable();
 
@@ -60,7 +60,7 @@ impl Computer {
             memory.push(next);
         }
 
-        Computer{ memory, position, relative_base: 0, done: false }
+        Computer{ memory, position: 0, relative_base: 0, done: false }
     }
 
     pub fn show(&self) {
@@ -320,40 +320,40 @@ fn run_computer(mut computer: Computer, inputs: Vec<i64>, targets: Vec<i64>) {
 fn test_examples() {
     let (mut deadsend, mut deadrecv) = channel();
 
-    let mut example1 = Computer::from_string("1,0,0,0,99", 0);
+    let mut example1 = Computer::from_string("1,0,0,0,99");
     let answer1  = Computer{ memory: vec![2,0,0,0,99], position: 4, relative_base: 0, done: false };
     example1.step(&mut deadrecv, &mut deadsend);
     assert_eq!(example1, answer1);
 
-    let mut example2 = Computer::from_string("2,3,0,3,99", 0);
+    let mut example2 = Computer::from_string("2,3,0,3,99");
     let answer2 = Computer{ memory: vec![2,3,0,6,99], position: 4, relative_base: 0, done: false };
     example2.step(&mut deadrecv, &mut deadsend);
     assert_eq!(example2, answer2);
 
-    let mut example3 = Computer::from_string("2,4,4,5,99,0", 0);
+    let mut example3 = Computer::from_string("2,4,4,5,99,0");
     let answer3 = Computer{ memory: vec![2,4,4,5,99,9801], position: 4, relative_base: 0, done: false };
     example3.step(&mut deadrecv, &mut deadsend);
     assert_eq!(example3, answer3);
 
-    let mut example4 = Computer::from_string("1,1,1,4,99,5,6,0,99", 0);
+    let mut example4 = Computer::from_string("1,1,1,4,99,5,6,0,99");
     let answer4 = Computer{ memory: vec![30,1,1,4,2,5,6,0,99], position: 8, relative_base: 0, done: true };
     example4.run(&mut deadrecv, &mut deadsend);
     assert_eq!(example4, answer4);
     assert!(example4.halted());
 
-    let mut example5 = Computer::from_string("1002,4,3,4,33", 0);
+    let mut example5 = Computer::from_string("1002,4,3,4,33");
     let answer5 = Computer{ memory: vec![1002,4,3,4,99], position: 4, relative_base: 0, done: true };
     example5.run(&mut deadrecv, &mut deadsend);
     assert_eq!(example5, answer5);
     assert!(example5.halted());
 
-    let mut example6 = Computer::from_string("1101,100,-1,4,0", 0);
+    let mut example6 = Computer::from_string("1101,100,-1,4,0");
     let answer6 = Computer{ memory: vec![1101,100,-1,4,99], position: 4, relative_base: 0, done: true };
     example6.run(&mut deadrecv, &mut deadsend);
     assert_eq!(example6, answer6);
     assert!(example6.halted());
 
-    let mut day5a = Computer::load("inputs/day5", 0);
+    let mut day5a = Computer::load("inputs/day5");
     let target = vec![0,0,0,0,0,0,0,0,0,7_259_358];
     let (    mysend, mut corecv) = channel();
     let (mut cosend,     myrecv) = channel();
@@ -385,13 +385,13 @@ fn test_examples() {
                      999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99],
                 vec![192], vec![1001]);
 
-    let example7a = Computer::from_string("3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0", 0);
+    let example7a = Computer::from_string("3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0");
     let result7a = example7a.serialize(vec![4,3,2,1,0]);
     assert_eq!(43210, result7a);
-    let example7b = Computer::from_string("3,23,3,24,1002,24,10,24,1002,23,-1,23,101,5,23,23,1,24,23,23,4,23,99,0,0", 0);
+    let example7b = Computer::from_string("3,23,3,24,1002,24,10,24,1002,23,-1,23,101,5,23,23,1,24,23,23,4,23,99,0,0");
     let result7b = example7b.serialize(vec![0,1,2,3,4]);
     assert_eq!(54321, result7b);
-    let example7c = Computer::from_string("3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0", 0);
+    let example7c = Computer::from_string("3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0");
     let target7c = 65210;
     let result7c = example7c.serialize(vec![1,0,4,3,2]);
     assert_eq!(target7c, result7c);
@@ -399,17 +399,17 @@ fn test_examples() {
     assert_eq!(target7c, result7c2);
     assert_eq!(result7c2, 65210);
     assert_eq!(example7c.find_best_signal(0..5, |x| example7c.serialize(x)).1, vec![1,0,4,3,2]);
-    let day7a = Computer::load("inputs/day7", 0);
+    let day7a = Computer::load("inputs/day7");
     let (day7score, day7settings) = day7a.find_best_signal(0..5, |x| day7a.serialize(x));
     assert_eq!(day7score, 206580);
     assert_eq!(day7settings, vec![2,0,1,4,3]);
 
-    let example7e = Computer::from_string("3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5", 0);
+    let example7e = Computer::from_string("3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5");
     assert_eq!(139629729, example7e.amplifier(vec![9,8,7,6,5]));
     let (example7es, example7et) = example7e.find_best_signal(5..10, |x| example7e.amplifier(x));
     assert_eq!(139629729, example7es);
     assert_eq!(vec![9,8,7,6,5], example7et);
-    let example7f = Computer::from_string("3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,-5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10", 0);
+    let example7f = Computer::from_string("3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,-5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10");
     assert_eq!(18216, example7f.amplifier(vec![9,7,8,5,6]));
     let (example7fs, example7ft) = example7f.find_best_signal(5..10, |x| example7f.amplifier(x));
     assert_eq!(18216, example7fs);
@@ -425,6 +425,6 @@ fn test_examples() {
                 vec![],
                 vec![1125899906842624]);
 
-    run_computer(Computer::load("inputs/day9", 0), vec![1], vec![3063082071]);
-    run_computer(Computer::load("inputs/day9", 0), vec![2], vec![81348]);
+    run_computer(Computer::load("inputs/day9"), vec![1], vec![3063082071]);
+    run_computer(Computer::load("inputs/day9"), vec![2], vec![81348]);
 }

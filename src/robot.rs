@@ -14,7 +14,7 @@ struct HullGrid {
 
 impl HullGrid {
     fn new(width: u32, height: u32, computer_path: &str) -> HullGrid {
-        let mut init_computer = Computer::load(computer_path, 0);
+        let mut init_computer = Computer::load(computer_path);
         let (    mysend, mut corecv) = channel();
         let (mut cosend,     myrecv) = channel();
 

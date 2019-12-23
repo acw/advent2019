@@ -140,7 +140,7 @@ impl MoveResult {
 
 impl RepairSearch {
     fn new(f: &str) -> RepairSearch {
-        let computer = Computer::load(f, 0);
+        let computer = Computer::load(f);
         RepairSearch { computer }
     }
 
@@ -213,7 +213,7 @@ impl Room {
     fn new(width: usize, height: usize, f: &str) -> Room {
         let (mut mysend, mut corecv) = channel();
         let (mut cosend, mut myrecv) = channel();
-        let mut my_computer = Computer::load(f, 0);
+        let mut my_computer = Computer::load(f);
         let mut layout = Vec::with_capacity(width * height);
 
         layout.resize(width * height, Tile::Unknown);

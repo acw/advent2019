@@ -83,7 +83,7 @@ impl Tile {
 
 impl Arcade {
     pub fn new(width: usize, height: usize, cheat: bool, logic_file: &str) -> Arcade {
-        let mut logic = Computer::load(logic_file, 0);
+        let mut logic = Computer::load(logic_file);
         let (    mysend, mut corecv) = channel();
         let (mut cosend, mut myrecv) = channel();
         let (mut upsend,     uprecv) = channel();
