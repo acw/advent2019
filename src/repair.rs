@@ -1,7 +1,5 @@
-use crate::endchannel::{Receiver, Sender, channel};
-use crate::machine::Computer;
+use crate::machine::{Computer, RunResult};
 use std::collections::VecDeque;
-use std::thread;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Direction {
@@ -20,16 +18,6 @@ impl Direction {
             Direction::West  => (x - 1, y),
         }
     }
-
-    fn random() -> Direction {
-        match rand::random::<u8>() & 0x3 {
-            0 => Direction::North,
-            1 => Direction::East,
-            2 => Direction::South,
-            3 => Direction::West,
-            _ => panic!("The world broke")
-        }
-    }
 }
 
 const ALL_DIRECTIONS: [Direction; 4] = [Direction::North,
@@ -38,15 +26,6 @@ const ALL_DIRECTIONS: [Direction; 4] = [Direction::North,
                                         Direction::West];
 
 impl Direction {
-    fn reverse(&self) -> Direction {
-        match self {
-            Direction::North => Direction::South,
-            Direction::East  => Direction::West,
-            Direction::South => Direction::North,
-            Direction::West  => Direction::East,
-        }
-    }
-
     fn encode(&self) -> i64 {
         match self {
             Direction::North => 1,
@@ -65,16 +44,6 @@ struct Path {
 impl Path {
     fn new() -> Path {
         Path{ steps: vec![] }
-    }
-
-    fn reverse(&self) -> Path {
-        let mut steps = Vec::with_capacity(self.steps.len());
-
-        for step in self.steps.iter().rev() {
-            steps.push(step.reverse());
-        }
-
-        Path{ steps }
     }
 
     fn extend(&self) -> Vec<Path> {
@@ -145,28 +114,32 @@ impl RepairSearch {
     }
 
     fn try_path(&mut self, path: &Path) -> MoveResult {
-        let (mut mysend, mut corecv) = channel();
-        let (mut cosend, mut myrecv) = channel();
-        let my_computer = self.computer.clone();
+        let mut my_computer = self.computer.clone();
         let mut last_response = MoveResult::Done;
+        let mut idx = 0;
 
-        thread::spawn(move || my_computer.clone().run(&mut corecv, &mut cosend));
-        for step in path.steps.iter() {
-            mysend.send(step.encode());
-            match myrecv.recv() {
-                None =>
+        loop {
+            match my_computer.run() {
+                RunResult::Continue(next) =>
+                    my_computer = next,
+                RunResult::Halted(_) =>
                     return last_response,
-                Some(response) => {
-                    last_response = MoveResult::new(response);
+                RunResult::Output(x, next) => {
+                    my_computer = next;
+                    last_response = MoveResult::new(x);
                     if last_response == MoveResult::HitWall {
-                        break
+                        return last_response;
                     }
+                }
+                RunResult::Input(c)  => {
+                    if idx >= path.steps.len() {
+                        return last_response;
+                    }
+                    my_computer = c(path.steps[idx].encode());
+                    idx += 1;
                 }
             }
         }
-        mysend.conclude();
-
-        last_response
     }
 
     fn run_search(&mut self) -> usize {
@@ -201,8 +174,7 @@ enum Tile {
 
 struct Room {
     layout: Vec<Tile>,
-    computer_input: Sender<i64>,
-    computer_output: Receiver<i64>,
+    computer: Computer,
     width: usize,
     height: usize,
     x: usize,
@@ -211,17 +183,13 @@ struct Room {
 
 impl Room {
     fn new(width: usize, height: usize, f: &str) -> Room {
-        let (mut mysend, mut corecv) = channel();
-        let (mut cosend, mut myrecv) = channel();
-        let mut my_computer = Computer::load(f);
+        let computer = Computer::load(f);
         let mut layout = Vec::with_capacity(width * height);
 
         layout.resize(width * height, Tile::Unknown);
-        thread::spawn(move || my_computer.run(&mut corecv, &mut cosend));
         Room{
             layout,
-            computer_input: mysend,
-            computer_output: myrecv,
+            computer,
             width, height,
             x: width / 2,
             y: height / 2,
@@ -248,6 +216,7 @@ impl Room {
         res
     }
 
+    /*
     fn print(&self) {
         println!("\n\n\n\n\n\n");
         for y in 0..self.height {
@@ -266,6 +235,7 @@ impl Room {
             println!();
         }
     }
+    */
 
     fn next_unknown(&self) -> Option<Direction> {
         let mut visited = vec![];
@@ -292,51 +262,61 @@ impl Room {
         None
     }
 
-    fn step(&mut self, direction: Direction) -> bool {
+    fn step(mut self, direction: Direction) -> (Self, bool) {
         let (tx, ty) = direction.apply(self.x, self.y);
 
         if self.get(tx, ty) == Tile::Wall {
-            return false;
+            return (self, false);
         }
 
-        self.computer_input.send(direction.encode());
-        match self.computer_output.recv() {
-            None => false,
-            Some(resp) => {
-                let response = MoveResult::new(resp);
+        loop {
+            match self.computer.run() {
+                RunResult::Continue(next) =>
+                    self.computer = next,
+                RunResult::Halted(next) => {
+                    self.computer = next;
+                    return (self, false);
+                }
+                RunResult::Input(c) =>
+                    self.computer = c(direction.encode()),
+                RunResult::Output(resp, next) => {
+                    let response = MoveResult::new(resp);
 
-                match response {
-                    MoveResult::HitWall => {
-                        self.set(tx, ty, Tile::Wall);
-                        false
-                    }
-                    MoveResult::Done => {
-                        self.set(tx, ty, Tile::Empty);
-                        self.x = tx;
-                        self.y = ty;
-                        true
-                    }
-                    MoveResult::FoundSystem => {
-                        self.set(tx, ty, Tile::Oxygen);
-                        self.x = tx;
-                        self.y = ty;
-                        true
+                    self.computer = next;
+                    match response {
+                        MoveResult::HitWall => {
+                            self.set(tx, ty, Tile::Wall);
+                            return (self, false);
+                        }
+                        MoveResult::Done => {
+                            self.set(tx, ty, Tile::Empty);
+                            self.x = tx;
+                            self.y = ty;
+                            return (self, true);
+                        }
+                        MoveResult::FoundSystem => {
+                            self.set(tx, ty, Tile::Oxygen);
+                            self.x = tx;
+                            self.y = ty;
+                            return (self, true);
+                        }
                     }
                 }
             }
         }
     }
 
-    fn map_room(&mut self) -> usize {
+    fn map_room(mut self) -> (Self, usize) {
         let mut steps = 0;
 
         while let Some(next_step) = self.next_unknown() {
             //println!("Steps taken: {} [x {}, y {}, next {:?}]", steps, self.x, self.y, next_step);
-            self.step(next_step);
+            let (next, _) = self.step(next_step);
+            self = next;
             steps += 1;
         }
 
-        steps
+        (self, steps)
     }
 
     fn has_empty_space(&self) -> bool {
@@ -381,8 +361,9 @@ fn day15a() {
 
 #[test]
 fn day15b() {
-    let mut day15b = Room::new(50, 50, "inputs/day15");
+    let day15b = Room::new(50, 50, "inputs/day15");
     assert!(day15b.next_unknown().is_some());
-    assert_eq!(2452, day15b.map_room());
-    assert_eq!(346, day15b.spread());
+    let (mut mapped, size) = day15b.map_room();
+    assert_eq!(2452, size);
+    assert_eq!(346, mapped.spread());
 }

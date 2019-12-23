@@ -1,33 +1,26 @@
-use crate::endchannel::{Sender, Receiver, channel};
-use crate::machine::Computer;
+use crate::machine::{Computer, RunResult};
 use image::{ImageBuffer, Rgb};
-use std::thread;
 
 struct HullGrid {
     data: ImageBuffer<Rgb<u8>, Vec<u8>>,
+    computer: Computer,
     robot_x: u32,
     robot_y: u32,
     robot_dir: Direction,
-    sender: Sender<i64>,
-    receiver: Receiver<i64>,
 }
 
 impl HullGrid {
     fn new(width: u32, height: u32, computer_path: &str) -> HullGrid {
-        let mut init_computer = Computer::load(computer_path);
-        let (    mysend, mut corecv) = channel();
-        let (mut cosend,     myrecv) = channel();
+        let computer = Computer::load(computer_path);
 
         assert!(width & 1 == 1);
         assert!(height & 1 == 1);
-        thread::spawn(move || init_computer.run(&mut corecv, &mut cosend));
         HullGrid {
             data: ImageBuffer::new(width, height),
+            computer,
             robot_x: width / 2,
             robot_y: height / 2,
             robot_dir: Direction::Up,
-            sender: mysend,
-            receiver: myrecv,
         }
     }
 
@@ -53,29 +46,55 @@ impl HullGrid {
         }
     }
 
-    fn paint_next(&mut self) -> bool {
-        self.sender.send_ignore_error(if self.is_white() { 1 } else { 0 });
-        match self.receiver.recv() {
-            None =>
-                false,
-            Some(new_color) => {
-                let rotation = self.receiver.recv().expect("Didn't get rotation back");
-                if new_color == 0 { self.set_black() } else { self.set_white() }
-                self.robot_dir = if rotation == 0 {
-                    self.robot_dir.rotate_right()
-                } else {
-                    self.robot_dir.rotate_left()
-                };
-                self.step();
-                true
+    fn paint_next(mut self, output: Option<&str>) -> Option<Self> {
+        let mut new_color: Option<i64> = None;
+
+        loop {
+            let color = if self.is_white() { 1 } else { 0 };
+
+            match self.computer.run() {
+                RunResult::Continue(next) =>
+                    self.computer = next,
+                RunResult::Halted(next) => {
+                    self.computer = next;
+                    if let Some(fname) = output {
+                        self.render(fname);
+                    }
+                    return None;
+                }
+                RunResult::Input(c) =>
+                    self.computer = c(color),
+                RunResult::Output(o, next) if new_color.is_none() => {
+                    new_color = Some(o);
+                    self.computer = next;
+                }
+                RunResult::Output(rotation, next) => {
+                    self.computer = next;
+
+                    if new_color.unwrap() == 0 {
+                        self.set_black()
+                    } else {
+                        self.set_white()
+                    }
+
+                    self.robot_dir = if rotation == 0 {
+                        self.robot_dir.rotate_right()
+                    } else {
+                        self.robot_dir.rotate_left()
+                    };
+
+                    self.step();
+                    return Some(self);
+                }
             }
         }
     }
 
-    fn paint_hull(&mut self) -> usize {
+    fn paint_hull(mut self, output: Option<&str>) -> usize {
         let mut points = vec![];
 
-        while self.paint_next() {
+        while let Some(next) = self.paint_next(output) {
+            self = next;
             let cur = (self.robot_x, self.robot_y);
             if !points.contains(&cur) {
                 points.push(cur);
@@ -86,7 +105,12 @@ impl HullGrid {
     }
 
     fn render(&self, file: &str) {
-        self.data.save(file);
+        match self.data.save(file) {
+            Err(e) =>
+                println!("Error saving file: {}", e),
+            Ok(_) =>
+                {}
+        }
     }
 }
 
@@ -143,10 +167,9 @@ fn rotations_work() {
 
 #[test]
 fn day11() {
-    let mut day1a = HullGrid::new(1001, 1001, "inputs/day11");
-    assert_eq!(2373, day1a.paint_hull());
+    let day1a = HullGrid::new(1001, 1001, "inputs/day11");
+    assert_eq!(2373, day1a.paint_hull(None));
     let mut day1b = HullGrid::new(1001, 1001, "inputs/day11");
     day1b.set_white();
-    assert_eq!(249, day1b.paint_hull());
-    day1b.render("day1.png");
+    assert_eq!(249, day1b.paint_hull(None));
 }

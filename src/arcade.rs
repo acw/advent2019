@@ -1,33 +1,16 @@
-use crate::endchannel::{Receiver, Sender, channel};
-use crate::machine::Computer;
+use crate::machine::{Computer, RunResult};
 use terminal_graphics::{Colour, Display};
+use std::collections::VecDeque;
 use std::fmt;
-use std::thread;
 
 pub struct Arcade {
     screen: Vec<Tile>,
     width: usize,
     height: usize,
     pub score: usize,
-    joystick_port: Sender<i64>,
-    update_port: Receiver<Update>,
+    logic: Computer,
     ball: (usize, usize),
     paddle: (usize, usize),
-}
-
-pub fn auto_move(arcade: &Arcade) -> Move {
-    let (ball_x, _) = arcade.ball;
-    let (paddle_x, _) = arcade.paddle;
-
-    if paddle_x < ball_x {
-        return Move::Right;
-    }
-
-    if paddle_x > ball_x {
-        return Move::Left;
-    }
-
-    Move::Neutral
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -37,13 +20,6 @@ enum Tile {
     Block,
     HorizontalPaddle,
     Ball,
-}
-
-enum Update {
-    Score(usize),
-    Ball(usize, usize),
-    Paddle(usize, usize),
-    Draw(usize, usize, Tile),
 }
 
 impl fmt::Display for Tile {
@@ -84,51 +60,72 @@ impl Tile {
 impl Arcade {
     pub fn new(width: usize, height: usize, cheat: bool, logic_file: &str) -> Arcade {
         let mut logic = Computer::load(logic_file);
-        let (    mysend, mut corecv) = channel();
-        let (mut cosend, mut myrecv) = channel();
-        let (mut upsend,     uprecv) = channel();
 
         if cheat { logic.write(0, 2); }
-        thread::spawn(move || logic.run(&mut corecv, &mut cosend));
-
         let mut screen = Vec::with_capacity(width * height);
         screen.resize(width * height, Tile::Empty);
-
-        thread::spawn(move || {
-            while let Some(first) = myrecv.recv() {
-                let second = myrecv.recv().expect("Didn't get second?!");
-                let third  = myrecv.recv().expect("Didn't get third?!");
-
-                if first == -1 && second == 0 {
-                    upsend.send_ignore_error(Update::Score(third as usize));
-                } else {
-                    let x = first as usize;
-                    let y = second as usize;
-                    let t = Tile::new(third);
-                    upsend.send_ignore_error(Update::Draw(x, y, t));
-                    if t == Tile::Ball             {
-                        upsend.send_ignore_error(Update::Ball(x, y));
-                    }
-                    if t == Tile::HorizontalPaddle {
-                        upsend.send_ignore_error(Update::Paddle(x, y));
-                    }
-                }
-            }
-            upsend.conclude();
-        });
-
         Arcade {
             screen,
             width,
             height,
-            joystick_port: mysend,
-            update_port: uprecv,
+            logic,
             score: 0,
             ball: (0, 0),
             paddle: (0, 0),
         }
     }
 
+    pub fn run<F: FnMut(&Arcade)>(mut self, mut redraw: F) -> Self {
+        let mut output_buffer = vec![];
+        let mut input_buffer = VecDeque::new();
+
+        loop {
+            match self.logic.run() {
+                RunResult::Continue(next) =>
+                    self.logic = next,
+                RunResult::Halted(next) => {
+                    self.logic = next;
+                    return self;
+                }
+                RunResult::Output(x, next) => {
+                    self.logic = next;
+                    output_buffer.push(x);
+                    if output_buffer.len() == 3 {
+                        if output_buffer[0] == -1 && output_buffer[1] == 0 {
+                            self.score = output_buffer[2] as usize;
+                        } else {
+                            let x = output_buffer[0] as usize;
+                            let y = output_buffer[1] as usize;
+                            let t = Tile::new(output_buffer[2]);
+                            self.screen[ (y * self.width) + x ] = t;
+                            if t == Tile::Ball {
+                                self.ball = (x, y);
+                                let (paddle_x, _) = self.paddle;
+
+                                if paddle_x < x {
+                                    input_buffer.push_back(Move::Right);
+                                } else if paddle_x > x {
+                                    input_buffer.push_back(Move::Left);
+                                } else {
+                                    input_buffer.push_back(Move::Neutral);
+                                }
+                            }
+                            if t == Tile::HorizontalPaddle {
+                                self.paddle = (x, y);
+                            }
+                        }
+                        output_buffer = vec![];
+                    }
+                }
+                RunResult::Input(c) => {
+                    self.logic = c(input_buffer.pop_front().unwrap().encode());
+                    redraw(&self);
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
     fn count_blocks(&self) -> usize {
         let mut count = 0;
 
@@ -139,39 +136,6 @@ impl Arcade {
         }
 
         count
-    }
-
-    pub fn process_update<F>(&mut self, next_move: F) -> bool
-         where F: Fn(&Arcade) -> Move
-    {
-        let next = self.update_port.recv();
-
-        if let Some(ref update) = next {
-            match update {
-                &Update::Score(s) => self.score = s,
-                &Update::Draw(x, y, t) => self.screen[ (y * self.width) + x ] = t,
-                &Update::Ball(x, y) => {
-                    self.ball = (x, y);
-                    let next = next_move(&self);
-                    self.paddle_move(next);
-                }
-                &Update::Paddle(x, y) => {
-                    self.paddle = (x, y);
-                //    let next = next_move(&self);
-                //    self.paddle_move(next);
-                }
-            }
-        }
-
-        next.is_some()
-    }
-
-    pub fn paddle_move(&mut self, motion: Move) {
-        match motion {
-            Move::Left    => self.joystick_port.send_ignore_error(-1),
-            Move::Neutral => self.joystick_port.send_ignore_error(0),
-            Move::Right   => self.joystick_port.send_ignore_error(1),
-        }
     }
 
     pub fn draw(&self, display: &mut Display) {
@@ -202,13 +166,23 @@ pub enum Move {
     Right,
 }
 
+impl Move {
+    fn encode(&self) -> i64 {
+        match self {
+            Move::Left    => -1,
+            Move::Neutral => 0,
+            Move::Right   => 1,
+        }
+    }
+}
+
 #[test]
 fn day13() {
-    let mut arcade1 = Arcade::new(38, 21, false, "inputs/day13");
-    while arcade1.process_update(auto_move) { }
-    assert_eq!(301, arcade1.count_blocks());
+    let arcade1 = Arcade::new(38, 21, false, "inputs/day13");
+    let result1 = arcade1.run(|_| {});
+    assert_eq!(301, result1.count_blocks());
 
-    let mut arcade2 = Arcade::new(38, 21, true, "inputs/day13");
-    while arcade2.process_update(auto_move) { }
-    assert_eq!(14096, arcade2.score);
+    let arcade2 = Arcade::new(38, 21, true, "inputs/day13");
+    let result2 = arcade2.run(|_| {});
+    assert_eq!(14096, result2.score);
 }

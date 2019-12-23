@@ -1,17 +1,16 @@
 mod arcade;
 mod args;
-mod endchannel;
 mod fuel;
 mod image;
 mod machine;
 mod orbits;
+#[cfg(test)]
 mod repair;
+#[cfg(test)]
 mod robot;
 mod wiremap;
 
-use crate::arcade::{auto_move, Move};
 use crate::args::Command;
-use crate::endchannel::channel;
 use crate::fuel::calculate_fuel;
 use crate::orbits::Object;
 use crate::wiremap::WireMap;
@@ -32,15 +31,12 @@ fn main() {
             println!("TOTAL FUEL: {}", total);
         }
 
-        Command::RunComputer(mut initial) => {
-            let (my_sender,    mut their_receiver) = channel();
-            let (mut their_sender, my_receiver)    = channel();
+        Command::RunComputer(initial) => {
             println!("Initial Computer:");
             initial.show();
             println!("Running, with input 5.");
-            my_sender.send(5);
-            initial.run(&mut their_receiver, &mut their_sender);
-            for val in my_receiver {
+            let results = initial.standard_run(&[5]);
+            for val in results.iter() {
                 println!("Received value: {}", val);
             }
         }
@@ -162,15 +158,15 @@ fn main() {
             image.draw();
         }
 
-        Command::Arcade(mut arcade) => {
+        Command::Arcade(arcade) => {
             let mut screen = Display::new(40, 40);
 
             screen.clear();
-            while arcade.process_update(auto_move) {
-                arcade.draw(&mut screen);
+            let result = arcade.run(move |a| {
+                a.draw(&mut screen);
                 screen.print();
-            }
-            println!("Final score: {}", arcade.score);
+            });
+            println!("Final score: {}", result.score);
         }
     }
  }
