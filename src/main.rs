@@ -10,6 +10,7 @@ mod repair;
 mod robot;
 #[cfg(test)]
 mod scaffold;
+mod tractor;
 mod wiremap;
 
 use crate::args::Command;
