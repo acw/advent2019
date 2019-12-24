@@ -10,6 +10,7 @@ mod repair;
 mod robot;
 #[cfg(test)]
 mod scaffold;
+#[cfg(test)]
 mod tractor;
 mod wiremap;
 

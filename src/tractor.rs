@@ -1,6 +1,4 @@
-use crate::endchannel::channel;
 use crate::machine::Computer;
-use std::thread;
 
 struct TractorMap {
     base_computer: Computer,
@@ -11,29 +9,24 @@ struct TractorMap {
 
 impl TractorMap {
     fn new(file: &str, side_size: usize) -> TractorMap {
-        let     base_computer = Computer::load(file, 0);
+        let     base_computer = Computer::load(file);
         let mut result = Vec::with_capacity(side_size * side_size);
         let mut affected = 0;
 
         result.resize(side_size * side_size, false);
         for x in 0..side_size {
             for y in 0..side_size {
-                let mut computer = base_computer.clone();
-                let (    mysend, mut corecv) = channel();
-                let (mut cosend, mut myrecv) = channel();
-
-                mysend.send(x as i64);
-                mysend.send(y as i64);
-                computer.run(&mut corecv, &mut cosend);
-                match myrecv.recv() {
-                    None => panic!("Uh-oh, computer broken!"),
-                    Some(0) => {}
-                    Some(1) => {
+                let computer = base_computer.clone();
+                let results = computer.standard_run(&[x as i64, y as i64]);
+                assert_eq!(results.len(), 1);
+                match results[0] {
+                    0 => {},
+                    1 => {
                         affected += 1;
                         let idx = (y * side_size) + x;
                         result[idx] = true;
                     }
-                    Some(x) => panic!("Weird value {}", x),
+                    _ => panic!("Weird value {}", x),
                 }
             }
         }
@@ -47,14 +40,9 @@ impl TractorMap {
     }
 
     fn ask(&self, x: usize, y: usize) -> bool {
-        let mut computer = self.base_computer.clone();
-        let (    mysend, mut corecv) = channel();
-        let (mut cosend, mut myrecv) = channel();
-
-        mysend.send(x as i64);
-        mysend.send(y as i64);
-        computer.run(&mut corecv, &mut cosend);
-        match myrecv.recv() {
+        let computer = self.base_computer.clone();
+        let mut results = computer.standard_run(&[x as i64, y as i64]);
+        match results.pop() {
             None => panic!("Uh-oh, computer broken!"),
             Some(0) => false,
             Some(1) => true,
