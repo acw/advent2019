@@ -15,6 +15,8 @@ mod scaffold;
 #[cfg(test)]
 mod spring;
 #[cfg(test)]
+mod station;
+#[cfg(test)]
 mod tractor;
 mod wiremap;
 
