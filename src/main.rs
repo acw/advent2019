@@ -9,6 +9,8 @@ mod repair;
 #[cfg(test)]
 mod robot;
 #[cfg(test)]
+mod router;
+#[cfg(test)]
 mod scaffold;
 #[cfg(test)]
 mod tractor;
