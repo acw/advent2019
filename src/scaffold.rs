@@ -1,8 +1,4 @@
-use crate::endchannel::channel;
-use crate::machine::Computer;
-use std::cmp::min;
-use std::fmt;
-use std::thread;
+use crate::machine::{Computer, RunResult};
 
 struct ScaffoldMap {
     data: Vec<Tile>,
@@ -12,32 +8,47 @@ struct ScaffoldMap {
 
 impl ScaffoldMap {
     fn new(intcode: &str) -> ScaffoldMap {
-        let mut computer = Computer::load(intcode, 0);
-        let (mut mysend, mut corecv) = channel();
-        let (mut cosend, mut myrecv) = channel();
-
-        thread::spawn(move || computer.run(&mut corecv, &mut cosend) );
+        let mut computer = Computer::load(intcode);
         let mut data = Vec::new();
         let mut width = 0;
         let mut height = 0;
         let mut got_width = false;
-        while let Some(c64) = myrecv.next() {
-            let c = c64 as u8 as char;
 
-            if c == '\n' {
-                height += 1;
-                got_width = true;
-                continue;
+        loop {
+            match computer.run() {
+                RunResult::Halted(_) => {
+                    height -= 1;
+                    assert_eq!(height, (data.len() / width));
+                    return ScaffoldMap{
+                        data,
+                        width, height
+                    }
+                }
+
+                RunResult::Continue(next) =>
+                    computer = next,
+
+                RunResult::Input(_) =>
+                    panic!("Don't know how to deal with input!"),
+
+                RunResult::Output(o, next) => {
+                    let c = o as u8 as char;
+
+                    computer = next;
+
+                    if c == '\n' {
+                        height += 1;
+                        got_width = true;
+                        continue;
+                    }
+                    if !got_width {
+                        width += 1;
+                    }
+
+                    data.push(Tile::from(c));
+                }
             }
-            if !got_width {
-                width += 1;
-            }
-            data.push(Tile::from(c));
         }
-        height -= 1;
-        assert_eq!(height, (data.len() / width));
-
-        ScaffoldMap{ data, width, height }
     }
 
     fn get(&self, x: usize, y: usize) -> Tile {
@@ -70,8 +81,6 @@ impl ScaffoldMap {
     }
 
     fn print(&self) {
-        let mut i = 0;
-
         println!("Scaffold is {} x {}", self.width, self.height);
         for y in 0..self.height {
             for x in 0..self.width {
@@ -427,23 +436,19 @@ fn day17b() {
     for (a, b, c) in triples {
         for answer in answers(&path, &a, &b, &c).iter() {
             assert_eq!(answer.to_path(), path);
-            let mut comp = Computer::load("inputs/day17", 0);
-            let (mut mysend, mut corecv) = channel();
-            let (mut cosend, mut myrecv) = channel();
+            let mut comp = Computer::load("inputs/day17");
+            let mut inputs = answer.to_inputs();
 
             assert_eq!(comp.read(0), 1);
             comp.write(0, 2);
-            thread::spawn(move || comp.run(&mut corecv, &mut cosend) );
-            let inputs = answer.to_inputs();
-            println!("Going to send: {:?}", inputs);
-            for x in answer.to_inputs() { mysend.send(x); }
-            mysend.send('n' as u8 as i64);
-            mysend.send('\n' as u8 as i64);
-            for x in myrecv {
-                if x < 256 {
-                    print!("{}", x as u8 as char);
+            inputs.push('n' as u8 as i64);
+            inputs.push('\n' as u8 as i64);
+            let results = comp.standard_run(&inputs);
+            for x in results.iter() {
+                if *x < 256 {
+                    print!("{}", *x as u8 as char);
                 } else {
-                    assert_eq!(768115, x);
+                    assert_eq!(768115, *x);
                 }
             }
         }

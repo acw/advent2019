@@ -8,6 +8,7 @@ mod orbits;
 mod repair;
 #[cfg(test)]
 mod robot;
+#[cfg(test)]
 mod scaffold;
 mod wiremap;
 
