@@ -13,6 +13,8 @@ mod router;
 #[cfg(test)]
 mod scaffold;
 #[cfg(test)]
+mod spring;
+#[cfg(test)]
 mod tractor;
 mod wiremap;
 
