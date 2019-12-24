@@ -64,7 +64,10 @@ impl ComputerState {
 }
 
 struct Router {
-    map: HashMap<usize, ComputerState>
+    map: HashMap<usize, ComputerState>,
+    nat: (i64, i64),
+    nat_ys: Vec<i64>,
+    result: i64,
 }
 
 impl Router {
@@ -76,7 +79,7 @@ impl Router {
             map.insert(i, ComputerState::new(c.clone(), i as i64));
         }
 
-        Router{ map }
+        Router{ map, nat: (0, 0), nat_ys: vec![], result: 0 }
     }
 
     fn step(mut self) -> Self {
@@ -92,8 +95,23 @@ impl Router {
             }
         }
 
+        if outputs.len() == 0 && self.map.iter().all(|(_, x)| x.input_queue.len() == 0) {
+            let (x, y) = self.nat;
+            outputs.push_back(0);
+            outputs.push_back(x);
+            outputs.push_back(y);
+            if self.nat_ys.contains(&y) {
+                self.result = y;
+                return self;
+            }
+            self.nat_ys.push(y);
+        }
+
         for (dest, x, y) in outputs.drain(0..).tuples() {
             match res.get_mut(&(dest as usize)) {
+                None if dest == 255 => {
+                    self.nat = (x, y);
+                }
                 None =>
                     panic!("Unknown destination {} (x {}, y {})", dest, x, y),
                 Some(state) => {
@@ -103,19 +121,20 @@ impl Router {
             }
         }
 
-        Router{ map: res }
+        self.map = res;
+        self
     }
 
-    fn run(mut self) -> Self {
+    fn run(mut self) -> i64 {
         while self.map.len() > 0 {
             self = self.step();
         }
-        self
+        self.result
     }
 }
 
 #[test]
-fn day23a() {
+fn day23() {
     let router = Router::new("inputs/day23", 0..50);
-    router.run();
+    assert_eq!(15080, router.run());
 }
