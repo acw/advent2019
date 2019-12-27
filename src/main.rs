@@ -3,6 +3,8 @@ mod args;
 mod fuel;
 mod image;
 mod machine;
+#[cfg(test)]
+mod nbody;
 mod orbits;
 #[cfg(test)]
 mod repair;
