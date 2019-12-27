@@ -2,6 +2,8 @@ mod arcade;
 mod args;
 #[cfg(test)]
 mod chemistry;
+#[cfg(test)]
+mod fft;
 mod fuel;
 mod image;
 mod machine;
