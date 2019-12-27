@@ -165,5 +165,5 @@ fn day14() {
     let day14_contents = fs::read("inputs/day14").expect("Couldn't open day14 problem");
     let day14_str = str::from_utf8(&day14_contents).expect("Couldn't decode day14 problem");
     let reactions: Vec<Reaction> = day14_str.trim().split('\n').map(Reaction::new).collect();
-    assert_eq!(319014, compute_ore(&reactions));
+    assert_eq!(0, compute_ore(&reactions));
 }
