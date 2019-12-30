@@ -1,12 +1,20 @@
 mod arcade;
 mod args;
 #[cfg(test)]
+mod bugs;
+#[cfg(test)]
+mod cards;
+#[cfg(test)]
 mod chemistry;
+#[cfg(test)]
+mod donut;
 #[cfg(test)]
 mod fft;
 mod fuel;
 mod image;
 mod machine;
+#[cfg(test)]
+mod maze;
 #[cfg(test)]
 mod nbody;
 mod orbits;
@@ -16,6 +24,7 @@ mod repair;
 mod robot;
 #[cfg(test)]
 mod router;
+mod santafind;
 #[cfg(test)]
 mod scaffold;
 #[cfg(test)]
@@ -29,6 +38,7 @@ mod wiremap;
 use crate::args::Command;
 use crate::fuel::calculate_fuel;
 use crate::orbits::Object;
+use crate::santafind::find_santa;
 use crate::wiremap::WireMap;
 use std::cmp::{max,min};
 use terminal_graphics::Display;
@@ -183,6 +193,10 @@ fn main() {
                 screen.print();
             });
             println!("Final score: {}", result.score);
+        }
+
+        Command::FindSanta(comp) => {
+            find_santa(comp);
         }
     }
  }

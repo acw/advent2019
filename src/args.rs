@@ -18,6 +18,7 @@ pub enum Command {
     Amplify(Computer),
     Image(Image),
     Arcade(Arcade),
+    FindSanta(Computer),
 }
 
 fn is_number(s: String) -> Result<(), String> {
@@ -120,6 +121,14 @@ impl Command {
                                                  .required(true)
                                                  .validator(is_file))
                                         )
+                           .subcommand(SubCommand::with_name("final")
+                                        .about("run the final computer")
+                                        .arg(Arg::with_name("COMPUTER")
+                                                 .index(1)
+                                                 .help("The computer to run.")
+                                                 .required(true)
+                                                 .validator(is_file))
+                                        )
                            .get_matches();
 
         if let Some(problem1) = matches.subcommand_matches("fuel") {
@@ -187,6 +196,12 @@ impl Command {
             let file = arcade.value_of("FILE").expect("No arcade file!");
             let arcade = Arcade::new(38, 21, true, file);
             return Command::Arcade(arcade);
+        }
+
+        if let Some(fin) = matches.subcommand_matches("final") {
+            let file = fin.value_of("COMPUTER").expect("No final computer file!");
+            let comp = Computer::load(&file);
+            return Command::FindSanta(comp);
         }
  
         panic!("Failed to run a reasonable command.");
